@@ -4,36 +4,94 @@
 #include <cuda_runtime.h>
 #include <driver_functions.h>
 
+#include "CycleTimer.h"
+
 #define NUM_NEURONS 1024
-#define NUM_IMAGES 60000
-#define NUM_LAYERS 1
-__global__ void simpleMatMulKernel(short * image, float * weights, float * results) {
+#define NUM_IMAGES 300
+#define NUM_LAYERS 120
+
+__global__ void simpleMatMulKernel(float * input, float * weights, float * results) {
     int index = blockDim.x*blockIdx.x + threadIdx.x;
+    
+    results[index] = 0;
+
     for(int i = 0; i < 1024 ; i ++) {
-        results[index] += image[i]*weights[i + NUM_NEURONS*index];
+        results[index] += input[blockIdx.x*NUM_NEURONS + i]*weights[i*NUM_NEURONS + threadIdx.x];
+    }
+    //Add bias
+    results[index] += -0.3;
+
+    //ReLU
+    if (results[index] < 0) {
+        results[index] = 0;
+    } else if (results[index] > 32) {
+        results[index] = 32;
     }
     // printf("%d\n", index);
     return;
 }
 
-void simplemutMulCuda(short *image, float weights[][1024], float *results) {
+__global__ void computeTruthKernel(float * output, short * truth) {
+    int index = blockIdx.x;
+    float sum = 0;
+    for (int i = 0; i < NUM_NEURONS ; i++) {
+        sum += output[blockIdx.x*NUM_NEURONS + i];
+    }
+    if (sum > 0) {
+        truth[index] = 1;
+    } else {
+        truth[index] = 0;
+    }
 
-    short* device_image;
+}
+
+void simplemutMulCuda(float *images, float **weights, float *results, short *truth) {
+
+    float* device_inputs;
     float* device_wts;
     float* device_results;
+    short* device_truth;
 
-    cudaMalloc((void**) &device_image, NUM_NEURONS * sizeof(short));
-    cudaMalloc((void**) &device_wts, NUM_LAYERS * NUM_NEURONS * NUM_NEURONS * sizeof(float));
-    cudaMalloc((void**) &device_results, NUM_NEURONS * sizeof(float));
+    cudaMalloc((void**) &device_inputs, NUM_IMAGES * NUM_NEURONS * sizeof(float));
+    cudaMalloc((void**) &device_wts, NUM_NEURONS * NUM_NEURONS * sizeof(float));
+    cudaMalloc((void**) &device_results, NUM_IMAGES * NUM_NEURONS * sizeof(float));
+
+    dim3 blockDim(NUM_NEURONS, 1);
+    dim3 gridDim(NUM_IMAGES);
+
+    double kernelStart = CycleTimer::currentSeconds();
+    for (int i = 0; i < NUM_LAYERS ; i++){
+        if (i == 0) {
+            cudaMemcpy(device_inputs, images, NUM_IMAGES * NUM_NEURONS * sizeof(float), cudaMemcpyHostToDevice);
+        }
+
+        cudaMemcpy(device_wts, weights[i], NUM_NEURONS * NUM_NEURONS * sizeof(float), cudaMemcpyHostToDevice);
     
-    // dim3 blockDim(512, 1);
-    // dim3 gridDim(2);
+        printf("Launching Kernel : %d\n", i);
+    
+        simpleMatMulKernel<<<gridDim, blockDim>>>(device_inputs, device_wts, device_results);
+        cudaDeviceSynchronize();
 
-    cudaMemcpy(device_image, image, NUM_NEURONS * sizeof(short), cudaMemcpyHostToDevice);
-    cudaMemcpy(device_wts, weights, NUM_LAYERS * NUM_NEURONS * NUM_NEURONS * sizeof(float), cudaMemcpyHostToDevice);
+        cudaMemcpy(device_inputs, device_results,  NUM_IMAGES * NUM_NEURONS * sizeof(float), cudaMemcpyHostToHost);
+    }
+    double kernelEnd = CycleTimer::currentSeconds();
+    printf("Feed Forward Kernel took %.4f s\n", (kernelEnd - kernelStart));
+    cudaMemcpy(results, device_results,  NUM_IMAGES * NUM_NEURONS * sizeof(float), cudaMemcpyDeviceToHost);
 
-    simpleMatMulKernel<<<32, 32>>>(device_image, device_wts, device_results);
+    //Free Memory on Device
+    cudaFree(device_inputs);
+    cudaFree(device_wts);
 
-    cudaMemcpy(results, device_results,  NUM_NEURONS * sizeof(float), cudaMemcpyDeviceToHost);
+    //Compute Truth Categories
+    cudaMalloc((void**) &device_truth, NUM_IMAGES * sizeof(short));
+    printf("Computing rowsum\n");
 
+    double truthKernelStart = CycleTimer::currentSeconds();
+    computeTruthKernel<<<NUM_IMAGES, 1>>>(device_results, device_truth);
+    double truthKernelEnd = CycleTimer::currentSeconds();
+    printf("Time Taken to Copmute Truth Values : %.4f ms\n", 1000.f * (truthKernelEnd - truthKernelStart));
+    cudaMemcpy(truth, device_truth, NUM_IMAGES * sizeof(short), cudaMemcpyDeviceToHost);
+
+    cudaFree(device_results);
+    cudaFree(device_truth);
 }
