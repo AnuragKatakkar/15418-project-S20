@@ -1,5 +1,5 @@
 #include <stdio.h>
-
+#include <mma.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <driver_functions.h>
@@ -7,25 +7,32 @@
 #include "CycleTimer.h"
 
 #define NUM_NEURONS 1024
-#define NUM_IMAGES 300
+#define NUM_IMAGES 30000 
 #define NUM_LAYERS 120
+
 
 __global__ void simpleMatMulKernel(float * input, float * weights, float * results) {
     int index = blockDim.x*blockIdx.x + threadIdx.x;
+
+    for (int j = 0 ; j < NUM_NEURONS/1024 ; j++) {
+        index = index + j*1024;
+
+        //Add Bias
+        results[index] = -0.3;
+
+        for(int i = 0; i < NUM_NEURONS ; i ++) {
+            if (input[blockIdx.x*NUM_NEURONS + i] == 0 || weights[i*NUM_NEURONS + threadIdx.x + j*1024] == 0) {
+                continue;
+            }
+            results[index] += input[blockIdx.x*NUM_NEURONS + i]*weights[i*NUM_NEURONS + threadIdx.x + j*1024];
+        }
     
-    results[index] = 0;
-
-    for(int i = 0; i < 1024 ; i ++) {
-        results[index] += input[blockIdx.x*NUM_NEURONS + i]*weights[i*NUM_NEURONS + threadIdx.x];
-    }
-    //Add bias
-    results[index] += -0.3;
-
-    //ReLU
-    if (results[index] < 0) {
-        results[index] = 0;
-    } else if (results[index] > 32) {
-        results[index] = 32;
+        //ReLU
+        if (results[index] < 0) {
+            results[index] = 0;
+        } else if (results[index] > 32) {
+            results[index] = 32;
+        }
     }
     // printf("%d\n", index);
     return;
@@ -35,7 +42,9 @@ __global__ void computeTruthKernel(float * output, short * truth) {
     int index = blockIdx.x;
     float sum = 0;
     for (int i = 0; i < NUM_NEURONS ; i++) {
-        sum += output[blockIdx.x*NUM_NEURONS + i];
+        if (output[blockIdx.x*NUM_NEURONS + i] != 0){
+            sum += output[blockIdx.x*NUM_NEURONS + i];
+        }
     }
     if (sum > 0) {
         truth[index] = 1;
@@ -56,7 +65,7 @@ void simplemutMulCuda(float *images, float **weights, float *results, short *tru
     cudaMalloc((void**) &device_wts, NUM_NEURONS * NUM_NEURONS * sizeof(float));
     cudaMalloc((void**) &device_results, NUM_IMAGES * NUM_NEURONS * sizeof(float));
 
-    dim3 blockDim(NUM_NEURONS, 1);
+    dim3 blockDim(1024, 1);
     dim3 gridDim(NUM_IMAGES);
 
     double kernelStart = CycleTimer::currentSeconds();

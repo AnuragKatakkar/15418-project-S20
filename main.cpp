@@ -12,16 +12,16 @@
 using namespace std;
 
 #define NUM_NEURONS 1024
-#define NUM_IMAGES 300
-#define NUM_LAYERS 120
+#define NUM_IMAGES 30000
+#define NUM_LAYERS 1
 
 void simplemutMulCuda(float *img, float **wts, float * res, short *truth);
-
+// void tensorMatMul(float *img, float **wts, float * res, short *truth);
 int main() {
 
     short * truth = new short[NUM_IMAGES];
 
-    string images_file = "./sparse-images-1024.tsv";
+    string images_file = "/afs/cs.cmu.edu/academic/class/15418-s20/public/projects/akatakka+inf/akatakkaData/n1024/sparse-images-1024.tsv";
 
     float **weights = new float* [NUM_LAYERS];
     for (int i = 0; i < NUM_LAYERS ; i++){
@@ -40,7 +40,7 @@ int main() {
 
     string line;
     for (int layer = 0; layer < NUM_LAYERS ; layer ++ ){
-        string weight_fname = "./data/n1024-l" + to_string(layer + 1) + ".tsv";
+        string weight_fname = "/afs/cs.cmu.edu/academic/class/15418-s20/public/projects/akatakka+inf/akatakkaData/n1024/n1024-l" + to_string(layer + 1) + ".tsv";
         cout << "Reading weights : "<< weight_fname <<"\n";
         
         ifstream ifs(weight_fname);
@@ -122,6 +122,7 @@ int main() {
     float *results = new float[NUM_IMAGES * NUM_NEURONS];
 
     simplemutMulCuda(images, weights, results, truth);
+    // tensorMatMul(images, weights, results, truth);
 
     // for (int i = 0 ; i < NUM_IMAGES ; i ++) {
     //     if (i != 286){
@@ -139,7 +140,7 @@ int main() {
         ground_truth[i] = 0;
     }
 
-    string ground_truth_file = "./data/neuron1024-l120-categories.tsv";
+    string ground_truth_file = "/afs/cs.cmu.edu/academic/class/15418-s20/public/projects/akatakka+inf/akatakkaData/n1024/neuron1024-l" + to_string(NUM_LAYERS) + "-categories.tsv";
     ifstream ifs_gt(ground_truth_file);
 	if (ifs_gt.fail()) {
 		cout << "error" << endl;
@@ -177,6 +178,11 @@ int main() {
     }
 
     cout << "Accuracy : "<< (accuracy/NUM_IMAGES) * 100 <<"%\n";
+
+    for (int i = 0; i < NUM_LAYERS ; i++){
+        delete weights[i];
+    }
+    delete weights;
 
     return 0;
 }
