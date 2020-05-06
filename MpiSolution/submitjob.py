@@ -27,13 +27,13 @@ def generateScript(scriptName = "latedays.sh", argString = "", outputName = "ben
     scriptFile.write("# Limit execution time to 30 minutes\n")    
     scriptFile.write("#PBS -lwalltime=0:030:00\n")    
     scriptFile.write("# Allocate all available CPUs on a single node\n")    
-    scriptFile.write("#PBS -l nodes=10:ppn=24\n")    
+    scriptFile.write("#PBS -l nodes=14:ppn=24\n")    
     scriptFile.write("\n")    
     scriptFile.write("# Go to the directory from which you submitted your job\n")
     scriptFile.write("cd $PBS_O_WORKDIR\n")    
     scriptFile.write("\n")    
     scriptFile.write("# Execute the performance evaluation program and store summary in %s\n" % outputName)
-    scriptFile.write("mpirun -np 10 -bynode -bind-to-core --hostfile $PBS_NODEFILE ./inference-mpi \n")
+    scriptFile.write("mpirun -np 14 -bynode -bind-to-core --hostfile $PBS_NODEFILE ./inference-mpi \n")
     scriptFile.close()
     return True
 

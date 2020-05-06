@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     }
     else
     {
-        image_chunk_size = (NUM_IMAGES + (NUM_IMAGES % num_processors)) / num_processors;
+        image_chunk_size = (NUM_IMAGES - (NUM_IMAGES % num_processors) + num_processors) / num_processors;
         img_idx_start = image_chunk_size * rank;
         img_idx_end = image_chunk_size * (rank + 1);
 
@@ -206,7 +206,6 @@ int main(int argc, char **argv) {
     // Sum all accuracy counts. 
     MPI_Reduce(&accuracy, &accuracy_sum, 1, MPI_FLOAT, MPI_SUM, MPI_MASTER, MPI_COMM_WORLD);
 
-    // MPI_Barrier(MPI_COMM_WORLD);
     if (rank == MPI_MASTER)
     {
         cout << "Accuracy : " << (accuracy_sum / NUM_IMAGES) * 100 << "%\n";
